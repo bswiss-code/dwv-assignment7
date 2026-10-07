@@ -1,0 +1,452 @@
+
+#Set Working Directory
+setwd("~/Documents/Data Wrangling Library/Week 7 Homework Files")
+
+#Open and Activate the Appropriate Libraries
+library(haven)
+library(tidyverse)
+
+#Read in the Cumulative American National Election Studies (ANES) File
+mydata <- read_dta('/Users/brynswiston/Documents/Data Wrangling Library/Week 7 Homework Files/anes_timeseries_cdf_stata_20220916.dta')
+
+#Filter Data by Variable of Interest and Year, VCF0301 and VCF0004
+PartyID <- c("VCF0004","VCF0301")
+
+#Create Data Set for the 2 Variables of Interest
+PartyIDyearly <- mydata [, PartyID]
+
+#Filter Data by Years Used in Fig 1
+PartyID52to96 <- PartyIDyearly |> filter(VCF0004%in%1952:1996)
+
+#Remove the misspelled PartIDYearly dataframe because it's bothering me
+rm(PartIDyearly)
+
+#Recode the PartyID Indentifiers so We Can Get Either Strong or Weak, Pure or Lean
+PartyID52to96_r <- PartyID52to96|>
+  mutate(VCF0301_r = case_when(
+    VCF0301 %in% c(1, 7) ~ "strong",
+    VCF0301 %in% c(2, 6) ~ "weak",
+    VCF0301 %in% c(3, 5) ~ "lean", 
+    VCF0301 %in% c(4) ~ "pure"
+  ))
+
+#Double Check the Counts with a Table
+table(PartyID52to96_r$VCF0301_r, useNA = "ifany")
+table(PartyID52to96$VCF0301, useNA = "ifany")
+
+#Filter Out the NA Data
+NoNAPartyID52to96_r <- PartyID52to96_r |>
+  filter(!is.na(VCF0301_r))
+#The change in the number of observations matches the NAs identified in the earlier table, so it must have been filtered out correctly.
+
+#Group by Year and Category, then Summarise and Find Proportions
+yearlyprop <- NoNAPartyID52to96_r |>
+  group_by(VCF0004, VCF0301_r) |>
+  summarise(countID = n()) |>
+  mutate(prop = countID / sum(countID))
+
+#Create New Columns Grouping by Party or Independent for the Two Graphs
+yearlyprop <- yearlyprop |>
+  mutate(dualgraph = case_when(
+    VCF0301_r %in% c("strong", "weak") ~ "party",
+    VCF0301_r %in% c("lean", "pure") ~ "independent"
+  ))
+
+#Try to Plot the Two Graphs
+ggplot(yearlyprop, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion", 
+       title = "Figure 1: The Distribution of Party Identification, 1952-1996") +
+  facet_wrap(~ dualgraph, ncol = 1) +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#I Think I have to Build Two Seperate Graphs...
+indep_data <- yearlyprop |> filter(dualgraph == "independent")
+party_data <- yearlyprop |> filter(dualgraph == "party")
+
+#Build the graph (with the independent data) that will go on the bottom
+bottom_ggplot <- ggplot(indep_data, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#Check the graph
+bottom_ggplot
+
+#Build the graph (party ID Data) that will go on the top
+top_ggplot <- ggplot(party_data, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion",
+       title = "Figure 1: The Distribution of Party Identification, 1952-1996") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#Check that graph
+top_ggplot
+
+#Install Patchwork to Merge Graphs
+library(patchwork)
+
+#Stack the Plots in Patchwork
+top_ggplot/bottom_ggplot
+
+#Now I have to extend this analysis to recent years. To do this, I will run my old code, but without filtering by year. I will start by recoding.
+PartyIDyearly_r <- PartyIDyearly|>
+  mutate(VCF0301_r = case_when(
+    VCF0301 %in% c(1, 7) ~ "strong",
+    VCF0301 %in% c(2, 6) ~ "weak",
+    VCF0301 %in% c(3, 5) ~ "lean", 
+    VCF0301 %in% c(4) ~ "pure"
+  ))
+
+#Filter Out the NA Data
+NoNAPartyIDyearly_r <- PartyIDyearly_r |>
+  filter(!is.na(VCF0301_r))
+
+#Group by Year and Category, then Summarise and Find Proportions
+yearlyprop2 <- NoNAPartyIDyearly_r |>
+  group_by(VCF0004, VCF0301_r) |>
+  summarise(countID = n()) |>
+  mutate(prop = countID / sum(countID))
+
+#Create New Columns Grouping by Party or Independent for the Two Graphs
+yearlyprop2 <- yearlyprop2 |>
+  mutate(dualgraph = case_when(
+    VCF0301_r %in% c("strong", "weak") ~ "party",
+    VCF0301_r %in% c("lean", "pure") ~ "independent"
+  ))
+
+#Begin Extended Stacked Plot
+indep_data2 <- yearlyprop2 |> filter(dualgraph == "independent")
+party_data2 <- yearlyprop2 |> filter(dualgraph == "party")
+
+#Build 2nd Bottom Plot
+bottom_ggplot2 <- ggplot(indep_data2, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#Build 2nd Top Plot and Change the Title
+top_ggplot2 <- ggplot(party_data2, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion",
+       title = "Figure 1: The Distribution of Party Identification, 1948-2020") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#Stack the Plots in Patchwork
+top_ggplot2/bottom_ggplot2
+
+#Read in the Cumulative American National Election Studies (ANES) File from 2024
+my2024data <- read_dta('/Users/brynswiston/Documents/Data Wrangling Library/Week 7 Homework Files/anes_timeseries_2024_stata_20250808.dta')
+
+#Create a Year Variable Because It's Missing
+my2024data <- my2024data |>
+  mutate(VCF0004 = 2024)
+
+#Filter 2024 Data by Variables of Interest, V241226 and VCF0004
+PartyID2024 <- c("V241227x", "VCF0004")
+
+#Create Data Set for the 2024 Variable of Interest
+PartyID2024 <- my2024data [, PartyID2024]
+
+#Recode the PartyID Indentifiers so We Can Get Either Strong or Weak, Pure or Lean, Checking to Ensure 2024 Labels are Correct
+PartyID2024_r <- PartyID2024|>
+  mutate(VCF0301_r = case_when(
+    V241227x %in% c(1, 7) ~ "strong",
+    V241227x %in% c(2, 6) ~ "weak",
+    V241227x %in% c(3, 5) ~ "lean", 
+    V241227x %in% c(4) ~ "pure",
+  ))
+
+#Filter out the NA Variables
+NoNAPartyID2024_r <- PartyID2024_r |>
+  filter(!is.na(VCF0301_r))
+data_2024 <- NoNAPartyID2024_r |>
+  select(VCF0004, VCF0301_r)
+
+#Double Check to Make Sure Everything is Sorted and the NAs are Filtered Out
+table(data_2024$VCF0301_r, useNA = "ifany")
+
+#Make Sure Everything is Recoded From the Start
+data_cdf <- PartyIDyearly |>
+  filter(VCF0004 %in% 1952:2020) |>
+  mutate(VCF0301_r = case_when(
+    VCF0301 %in% c(1, 7) ~ "strong",
+    VCF0301 %in% c(2, 6) ~ "weak",
+    VCF0301 %in% c(3, 5) ~ "lean",
+    VCF0301 %in% c(4) ~ "pure"
+  )) |>
+  filter(!is.na(VCF0301_r)) |>
+  select(VCF0004, VCF0301_r)
+
+#Stack the Data Frames
+combined <- bind_rows(data_cdf, data_2024)
+
+#Group by Year and Category, then Summarise and Find Proportions
+yearlypropw2024 <- combined |>
+  group_by(VCF0004, VCF0301_r) |>
+  summarise(countID = n()) |>
+  mutate(prop = countID / sum(countID))
+
+#Create New Columns Grouping by Party or Independent for the Two Graphs Again
+yearlypropw20242 <- yearlypropw2024 |>
+  mutate(dualgraph = case_when(
+    VCF0301_r %in% c("strong", "weak") ~ "party",
+    VCF0301_r %in% c("lean", "pure") ~ "independent"
+  ))
+
+#Seperate the Two Groups
+indep_data2024 <- yearlypropw20242 |> filter(dualgraph == "independent")
+party_data2024 <- yearlypropw20242 |> filter(dualgraph == "party")
+
+#Build the Two Graphs
+bottom_ggplot2024 <- ggplot(indep_data2024, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+top_ggplot2024 <- ggplot(party_data2024, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion",
+       title = "Figure 1: The Distribution of Party Identification, 1952-2024") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point() 
+
+#Stack the Plots in Patchwork
+top_ggplot2024/bottom_ggplot2024
+
+
+#I need to create a data set that separates out two different columns for election years and presidential years. *Note, it looks like I'm missing data from 2018 and 2022-- I'll make that clear in the graph. 
+mpcombined <- combined |>
+  mutate(election_type = case_when(
+    VCF0004 %% 4 == 0 ~ "presidential",
+    VCF0004 %% 4 == 2 ~ "midterm"
+  ))
+
+#Now I will use the grouping function and the proportion functions
+mpcombinedwprop <- mpcombined |>
+  filter(!is.na(election_type)) |>
+  group_by(VCF0004, election_type, VCF0301_r) |>
+  summarise(count = n()) |>
+  mutate(prop = count / sum(count))
+
+#Create the Graphs
+mpcombinedwprop_r <- mpcombinedwprop |>
+  mutate(dualgraph = case_when(
+    VCF0301_r %in% c("strong", "weak") ~ "party",
+    VCF0301_r %in% c("lean", "pure") ~ "independent"
+  ))
+
+indep_datamp <- mpcombinedwprop_r |> filter(dualgraph == "independent")
+party_datamp <- mpcombinedwprop_r |> filter(dualgraph == "party")
+
+top_ggplotmp <- ggplot(indep_datamp, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion",
+       title = "Figure 1: The Distribution of Party Identification, 1952-2024 by Election Type") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  guides(color = "none") +
+  theme_classic() +
+  geom_line() +
+  geom_point(aes(color = election_type)) +
+  scale_color_manual(
+    values = c("presidential" = "blue", "midterm" = "red"),
+    name = "Election type"
+  )
+
+top_ggplotmp
+
+bottom_ggplotmp <- ggplot(party_datamp, aes(x = VCF0004, y = prop, group = VCF0301_r, linetype = VCF0301_r, shape = VCF0301_r)) +
+  labs(x = "Year", 
+       y = "Proportion") +
+  scale_shape_manual(
+    values = c("strong" = 16, "pure" = 16, "weak" = 1, "lean" = 1),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_linetype_manual(
+    values = c("strong" = "solid", "pure" = "solid", "weak" = "dashed", "lean" = "dashed"),
+    labels = c("lean" = "Independent Leaners", "pure" = "Pure Independents", "strong" = "Strong Identifiers", "weak" = "Weak Identifiers"),
+    name = "Key"
+  ) +
+  scale_y_continuous(limits = c(0, 0.5), breaks = seq(0, 0.5, by = 0.1)) +
+  theme_classic() +
+  geom_line() +
+  geom_point(aes(color = election_type)) +
+  scale_color_manual(
+    values = c("presidential" = "blue", "midterm" = "red"),
+    labels = c("presidential" = "Presidential", "midterm" = "Midterm"),
+    name = "Election Type"
+  )
+
+bottom_ggplotmp
+
+top_ggplotmp/bottom_ggplotmp
+
+#I am now going to create my own graph from interesting variables from the data set
+myvaribs <- c("VCF0748", "VCF0004", "VCF0824")
+myvaribsyearly <- mydata [, myvaribs]
+
+#Recode the Day Of/Early Variable
+myvaribsyearly_r1 <- myvaribsyearly|>
+  mutate(VCF0748_r = case_when(
+    VCF0748 %in% c(1) ~ "On election day",
+    VCF0748 %in% c(5) ~ "Some time before"
+  ))
+
+#Recode the ID Variable
+myvaribsyearly_r2 <- myvaribsyearly_r1 |>
+  mutate (VCF0824_r = case_when(
+    VCF0824 %in% c(1) ~ "liberal",
+    VCF0824 %in% c(2) ~ "lean liberal",
+    VCF0824 %in% c(3) ~ "moderate",
+    VCF0824 %in% c(4) ~ "lean conservative",
+    VCF0824 %in% c(5) ~ "conservative"
+  ))
+
+#Filter Out the NA Data From Election
+NoNAvaribsyearly_r <- myvaribsyearly_r2 |>
+  filter(!is.na(VCF0748_r))
+
+#Filter Out the NA Data From ID
+NoNAvaribsyearly_r2 <- NoNAvaribsyearly_r |>
+  filter(!is.na(VCF0824_r))
+
+#Now I will use the grouping function and the proportion functions
+myvaribsfinal1 <- NoNAvaribsyearly_r2 |>
+  group_by(VCF0004, VCF0824_r, VCF0748_r) |>
+  summarise(count = n()) |>
+  mutate(prop = count / sum(count))
+ideology_totals <- myvaribsfinal1 |>
+  group_by(VCF0824_r) |>
+  summarise(total = sum(count))
+
+bars_data <- myvaribsfinal1 |>
+  group_by(VCF0824_r, VCF0748_r) |>
+  summarise(count = sum(count))
+
+#Create Graph
+ggplot(bars_data, aes(x = VCF0824_r, y = count, fill = VCF0748_r)) +
+  geom_col(position = "fill") +
+  labs(x = "Ideology",
+       y = "Proportion",
+       fill = "When decided",
+       title = "Proportion of Voters Who Vote Early by Ideology, 1994-2020") +
+  theme_classic()
+
+#Reponse Question Answers
+#1. My first problem that I can into was learning how to stack the plots. As you can see in my code, I thought I could 
+#make one graph intitally,but I learned that I had to build the plots individually and then stack them with patchwork. 
+#Another tricky aspect was merging the 2024 data set. I had to do a fair amount of research to figure out how to combine them, 
+#making sure the rows and the coloumns were going to line up smoothly. 
+#2. In Figure 1, Bartels found that the number of independents, whether "pure" or"leaners" has decreased, and in the same 
+#vein, party identification has gone up. Most people remain either "weakly" identified with a party or "leaners. 
+#In Figure 2, Party identification as a whole remains strongest amongst voters as compared to non-voters. 
+#3. Since 1996, you can see that strong identifers have significantly swung upwards, while pure independents have dipped.
+#To me, this demonstrates that there has been increased polarization in the United States politically. I think this
+#actually supports Bartel's findings that the "decline of parties" simply isn't happening, but identification is in fact
+#trending in the opposite direction. 
+#4. The inclusion of the midterm was interesting, but we run into the road block of the missing data. Overall, it looks
+#like it consistently swings opposite of the presidential election. When one increases, the other decreases and vice versa.
+#However, I am doubtful it changes anything about the overall analysis. 
+
+
+
